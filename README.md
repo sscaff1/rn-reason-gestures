@@ -4,4 +4,4 @@ This simple module uses the render prop pattern to utilize basic panning gesture
 
 Here is an example:
 
-[[https://github.com/username/repository/blob/master/img/octocat.png|alt=octocat]]
+![Example](https://github.com/sscaff1/rn-reason-gestures/blob/master/example.gif)
