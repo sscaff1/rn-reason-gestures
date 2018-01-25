@@ -11,7 +11,8 @@ let make = _children => {
   ...component,
   render: _self =>
     <Motion
-      imageSize=300
+      imageSize={width: 300., height: 300.}
+      containerSize={width: 375., height: 400.}
       render=(
         () =>
           <Image
