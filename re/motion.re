@@ -18,7 +18,8 @@ type dimensions = {
 type childProps = {
   mutable image: dimensions,
   mutable container: dimensions,
-  mutable initialDistance: float
+  mutable initialDistance: float,
+  mutable currentScaleValue: float
 };
 
 let component = ReasonReact.statelessComponent("Motion");
@@ -34,7 +35,8 @@ let motionProps = {
     width: 0.,
     height: 0.
   },
-  initialDistance: 0.
+  initialDistance: 0.,
+  currentScaleValue: 1.
 };
 
 let pan = Animated.ValueXY.create(~x=0., ~y=0.);
@@ -42,6 +44,8 @@ let pan = Animated.ValueXY.create(~x=0., ~y=0.);
 let scale = Animated.Value.create(1.);
 
 let childCoordinates = {x: 0., y: 0.};
+
+let childScale = ref(1.);
 
 let resetPan = (_) => Animated.ValueXY.extractOffset(pan);
 
@@ -85,16 +89,20 @@ let movePosition =
   | TopBottom(y) => handleAutomatedMove(~y, ())
   | LeftRight(x) => handleAutomatedMove(~x, ());
 
-let handleRelease = (_e, _g) => {
-  let {image, container} = motionProps;
-  let imageRight = image.width +. childCoordinates.x;
-  let imageBottom = image.height +. childCoordinates.y;
-  let dimTuple = (
-    childCoordinates.x,
-    childCoordinates.y,
-    imageRight,
-    imageBottom
-  );
+let handlePanStart = (_e, g: PanResponder.gestureState) =>
+  g.numberActiveTouches == 1;
+
+let adjustChildPosition = () => {
+  let {image, container, currentScaleValue} = motionProps;
+  let imageWidth = image.width *. currentScaleValue;
+  let imageHeight = image.height *. currentScaleValue;
+  let imageLeft =
+    childCoordinates.x +. (1. -. currentScaleValue) *. image.width /. 2.;
+  let imageTop =
+    childCoordinates.y +. (1. -. currentScaleValue) *. image.height /. 2.;
+  let imageRight = imageWidth +. imageLeft;
+  let imageBottom = imageHeight +. imageTop;
+  let dimTuple = (imageLeft, imageTop, imageRight, imageBottom);
   resetPan();
   switch dimTuple {
   | (_, t, r, _) when t < 0. && r > container.width =>
@@ -115,9 +123,11 @@ let handleRelease = (_e, _g) => {
   };
 };
 
+let handleRelease = (_e, _g) => adjustChildPosition();
+
 let panResponder =
   PanResponder.create(
-    ~onStartShouldSetPanResponder=PanResponder.callback((_e, _g) => true),
+    ~onStartShouldSetPanResponder=PanResponder.callback(handlePanStart),
     ~onPanResponderMove=`update([`XY(pan)]),
     ~onPanResponderRelease=PanResponder.callback(handleRelease),
     ()
@@ -133,13 +143,19 @@ let handleScaleStart = (e, g: PanResponder.gestureState) =>
   };
 
 let handleScaleMove = (e, _g) =>
-  Utilities.distance(RNEvent.NativeEvent.touches(e)) |> Js.log;
+  Utilities.distance(e |> RNEvent.NativeEvent.touches)
+  /. motionProps.initialDistance
+  *. motionProps.currentScaleValue
+  |> Animated.Value.setValue(scale);
+
+let handleScaleRelease = (_e, _g) =>
+  motionProps.currentScaleValue = childScale^;
 
 let scaleResponder =
   PanResponder.create(
-    ~onStartShouldSetPanResponderCapture=
-      PanResponder.callback(handleScaleStart),
+    ~onStartShouldSetPanResponder=PanResponder.callback(handleScaleStart),
     ~onPanResponderMove=`callback(PanResponder.callback(handleScaleMove)),
+    ~onPanResponderRelease=PanResponder.callback(handleScaleRelease),
     ()
   );
 
@@ -148,7 +164,11 @@ let panListener = r => {
   childCoordinates.y = r##y;
 };
 
+let scaleListener = s => childScale := s##value;
+
 let panListener = Animated.ValueXY.addListener(pan, panListener);
+
+let scaleListener = Animated.Value.addListener(scale, scaleListener);
 
 let styles =
   StyleSheet.create(
@@ -159,6 +179,8 @@ let styles =
             Transform.makeAnimated(
               ~translateX=Animated.ValueXY.getX(pan),
               ~translateY=Animated.ValueXY.getY(pan),
+              ~scaleY=scale,
+              ~scaleX=scale,
               ()
             )
           ])
